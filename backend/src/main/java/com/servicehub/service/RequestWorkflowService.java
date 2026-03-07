@@ -32,6 +32,7 @@ public class RequestWorkflowService {
     private final StatusHistoryService statusHistoryService;
     private final UserRepository userRepository;
     private final StatusTransitionValidator statusTransitionValidator;
+  
 
     /**
      * Updates the status of a service request.
@@ -72,10 +73,26 @@ public class RequestWorkflowService {
         // Update the request status
         String previousStatus = currentStatus.name();
         request.setStatus(newStatus);
-        LocalDateTime now = LocalDateTime.now();
 
         // Handle SLA tracking based on status changes
-        updateSlaTracking(request, newStatus, now);
+        if (newStatus == RequestStatus.ASSIGNED) {
+            // Record response when ticket is assigned
+            slaTrackingService.recordResponse(request);
+        } else if (newStatus == RequestStatus.RESOLVED) {
+            // Record resolution when ticket is resolved
+            slaTrackingService.recordResolution(request);
+        } else if (newStatus == RequestStatus.CLOSED) {
+            // Record closed timestamp
+            request.setClosedAt(LocalDateTime.now());
+        } else if (newStatus == RequestStatus.OPEN && currentStatus == RequestStatus.RESOLVED) {
+            // Reopening: reset SLA tracking timestamps
+            request.setResolvedAt(null);
+            request.setResolutionSlaMet(null);
+            request.setResponseSlaMet(null);
+            request.setRespondedAt(null);
+            request.setIsSlaBreached(false);
+            // Note: Due dates remain unchanged on reopen
+        }
 
         // Save the updated request
         ServiceRequest savedRequest = serviceRequestRepository.save(request);
@@ -103,46 +120,6 @@ public class RequestWorkflowService {
                 comment,
                 savedHistory.getChangedAt()
         );
-    }
-
-    /**
-     * Updates SLA tracking fields based on status changes.
-     *
-     * @param request   the service request
-     * @param newStatus the new status
-     * @param now       the current timestamp
-     */
-    private void updateSlaTracking(ServiceRequest request, RequestStatus newStatus, LocalDateTime now) {
-        // When status moves to IN_PROGRESS, mark response SLA
-        if (newStatus == RequestStatus.IN_PROGRESS && request.getRespondedAt() == null) {
-            request.setRespondedAt(now);
-            if (request.getResponseSlaDeadline() != null) {
-                request.setResponseSlaMet(now.isBefore(request.getResponseSlaDeadline()));
-            }
-        }
-
-        // When status moves to RESOLVED, mark resolution SLA
-        if (newStatus == RequestStatus.RESOLVED) {
-            request.setResolvedAt(now);
-            if (request.getResolutionSlaDeadline() != null) {
-                request.setResolutionSlaMet(now.isBefore(request.getResolutionSlaDeadline()));
-            }
-        }
-
-        // When status moves to CLOSED, record closed timestamp
-        if (newStatus == RequestStatus.CLOSED) {
-            request.setClosedAt(now);
-        }
-
-        // If reopening (RESOLVED -> OPEN), reset SLA tracking
-        if (newStatus == RequestStatus.OPEN && request.getResolvedAt() != null) {
-            request.setResolvedAt(null);
-            request.setResolutionSlaMet(null);
-            request.setResponseSlaMet(null);
-            request.setRespondedAt(null);
-            // Note: SLA deadlines would need to be recalculated by the SLA service
-            // This is handled in the main ServiceRequestService for now
-        }
     }
 }
 
