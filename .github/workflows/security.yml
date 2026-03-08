@@ -135,7 +135,7 @@ jobs:
       - name: Set up Trivy
         uses: aquasecurity/setup-trivy@v0.2.3
         with:
-          version: v0.68.1
+          version: v0.67.3
           cache: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
