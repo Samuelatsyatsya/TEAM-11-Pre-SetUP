@@ -140,6 +140,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Trivy (vuln, misconfig, secret)
+        id: trivy_scan
+        continue-on-error: true
         uses: aquasecurity/trivy-action@0.33.1
         with:
           skip-setup-trivy: true
@@ -151,7 +153,47 @@ jobs:
           severity: CRITICAL
           exit-code: "1"
 
+      - name: Print Trivy summary
+        if: always()
+        run: |
+          if [[ ! -f trivy-results.sarif ]]; then
+            echo "Trivy SARIF output was not generated."
+            exit 0
+          fi
+
+          total_findings="$(jq '.runs[0].results | length' trivy-results.sarif)"
+          echo "Trivy findings at configured threshold: ${total_findings}"
+
+          {
+            echo "## Trivy Findings Summary"
+            echo ""
+            echo "- Severity threshold: \`CRITICAL\`"
+            echo "- Total findings: **${total_findings}**"
+            echo ""
+            if [[ "${total_findings}" -gt 0 ]]; then
+              echo "### Top findings"
+              jq -r '
+                .runs[0].results
+                | .[:25]
+                | .[]
+                | "- **\(.ruleId // "UNKNOWN")**: \(.message.text // "No message") (`\(.locations[0].physicalLocation.artifactLocation.uri // "unknown")`)"
+              ' trivy-results.sarif
+              echo ""
+              echo "_Showing first 25 findings._"
+            else
+              echo "No CRITICAL findings detected."
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Upload Trivy SARIF
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+
+      - name: Fail if Trivy found issues
+        if: steps.trivy_scan.outcome == 'failure'
+        run: |
+          echo "Trivy detected findings at the configured severity threshold (CRITICAL)."
+          echo "See 'Print Trivy summary' above for details."
+          exit 1
