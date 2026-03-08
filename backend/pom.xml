@@ -20,6 +20,9 @@
         <postgresql.version>42.7.10</postgresql.version>
         <jackson.version>2.18.6</jackson.version>
         <logback.version>1.5.25</logback.version>
+        <spring-framework.version>6.2.11</spring-framework.version>
+        <spring-security.version>6.4.10</spring-security.version>
+        <commons-lang3.version>3.18.0</commons-lang3.version>
     </properties>
     <dependencies>
         <dependency>
@@ -63,6 +66,16 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>${commons-lang3.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
