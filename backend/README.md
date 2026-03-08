@@ -187,7 +187,7 @@ docker compose up postgres mailhog -d
 ### Connect Directly
 
 ```bash
-docker exec -it servicehub-db psql -U servicehub_app -d servicehub
+docker compose exec postgres psql -U servicehub_app -d servicehub
 ```
 
 ## Common Tasks
@@ -209,8 +209,10 @@ docker exec -it servicehub-db psql -U servicehub_app -d servicehub
 From the `backend/` directory:
 
 ```bash
-docker build -t servicehub-api .
+docker build --build-arg APP_PORT=8080 -t servicehub-api .
 ```
+
+`APP_PORT` defaults to `8080` in the Dockerfile; pass a different value only when needed.
 
 ### Add a New Entity
 

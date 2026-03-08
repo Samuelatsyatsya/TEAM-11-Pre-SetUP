@@ -1,15 +1,11 @@
-# =============================================================================
 # ServiceHub Frontend — Multi-Stage Dockerfile
-# =============================================================================
 # Stage 1: Dependencies (cached layer — only re-runs when package.json changes)
 # Stage 2: Build (next build — produces optimized production output)
 # Stage 3: Runtime (Node slim — serves the built app)
 #
 # Uses Debian-slim images (not Alpine) for cross-platform compatibility
 # with both amd64 (Linux) and arm64 (Apple Silicon Mac) architectures.
-# =============================================================================
 
-# --- Stage 1: Install dependencies ---
 FROM node:20-slim AS deps
 
 WORKDIR /app
@@ -25,7 +21,6 @@ RUN \
   else echo "No lockfile found. Run 'npm install' first." && exit 1; \
   fi
 
-# --- Stage 2: Build ---
 FROM node:20-slim AS build
 
 WORKDIR /app
@@ -42,12 +37,14 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # Disable Next.js telemetry during build
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN npm run build
+# Ensure /app/public exists even if the project has no public assets.
+RUN mkdir -p /app/public && npm run build
 
-# --- Stage 3: Runtime ---
 FROM node:20-slim AS runtime
 
 WORKDIR /app
+
+ARG APP_PORT=3000
 
 # Create non-root user
 RUN groupadd -r servicehub && useradd -r -g servicehub servicehub
@@ -65,14 +62,14 @@ RUN chown -R servicehub:servicehub /app
 
 USER servicehub
 
-EXPOSE 3000
+EXPOSE ${APP_PORT}
 
-ENV PORT=3000
+ENV PORT=${APP_PORT}
 ENV HOSTNAME="0.0.0.0"
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:3000 || exit 1
+  CMD curl -f http://localhost:${PORT} || exit 1
 
 CMD ["node", "server.js"]
