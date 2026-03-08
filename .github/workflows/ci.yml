@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - feature/configure-dockerfiles
+  pull_request:
+    branches:
+      - main
+      - develop
+      - staging
+  workflow_dispatch:
+    inputs:
+      run_all:
+        description: Run all specialties regardless of changed files
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changed specialties
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      data_engineering: ${{ steps.filter.outputs.data_engineering }}
+      qa: ${{ steps.filter.outputs.qa }}
+      devops: ${{ steps.filter.outputs.devops }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'docker-compose.yml'
+              - '.github/workflows/_ci-backend.yml'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - 'docker-compose.yml'
+              - '.github/workflows/_ci-frontend.yml'
+              - '.github/workflows/ci.yml'
+            data_engineering:
+              - 'data-engineering/**'
+              - 'docker-compose.yml'
+              - '.github/workflows/_ci-data-engineering.yml'
+              - '.github/workflows/ci.yml'
+            qa:
+              - 'qa/**'
+              - '.github/workflows/_ci-qa.yml'
+              - '.github/workflows/ci.yml'
+            devops:
+              - 'devops/**'
+              - 'docker-compose.yml'
+              - '.env.example'
+              - '.github/workflows/_ci-devops.yml'
+              - '.github/workflows/ci.yml'
+
+  backend:
+    name: Backend
+    needs: changes
+    if: |
+      github.event_name == 'workflow_dispatch' && (inputs.run_all == true) ||
+      needs.changes.outputs.backend == 'true'
+    uses: ./.github/workflows/_ci-backend.yml
+
+  frontend:
+    name: Frontend
+    needs: changes
+    if: |
+      github.event_name == 'workflow_dispatch' && (inputs.run_all == true) ||
+      needs.changes.outputs.frontend == 'true'
+    uses: ./.github/workflows/_ci-frontend.yml
+
+  data-engineering:
+    name: Data Engineering
+    needs: changes
+    if: |
+      github.event_name == 'workflow_dispatch' && (inputs.run_all == true) ||
+      needs.changes.outputs.data_engineering == 'true'
+    uses: ./.github/workflows/_ci-data-engineering.yml
+
+  qa:
+    name: QA
+    needs: changes
+    if: |
+      github.event_name == 'workflow_dispatch' && (inputs.run_all == true) ||
+      needs.changes.outputs.qa == 'true'
+    uses: ./.github/workflows/_ci-qa.yml
+
+  devops:
+    name: DevOps
+    needs: changes
+    if: |
+      github.event_name == 'workflow_dispatch' && (inputs.run_all == true) ||
+      needs.changes.outputs.devops == 'true'
+    uses: ./.github/workflows/_ci-devops.yml

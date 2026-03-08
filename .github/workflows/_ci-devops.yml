@@ -1,0 +1,25 @@
+name: _CI DevOps (Reusable)
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  devops:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bash syntax checks
+        run: |
+          bash -n devops/scripts/deploy.sh
+          bash -n devops/scripts/init-db.sh
+
+      - name: Docker Compose config validation
+        run: |
+          cp .env.example .env
+          docker compose config -q
