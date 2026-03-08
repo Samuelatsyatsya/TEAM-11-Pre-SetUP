@@ -132,9 +132,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Trivy (vuln, misconfig, secret)
-        uses: aquasecurity/trivy-action@0.28.0
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@v0.2.3
         with:
+          version: v0.68.1
+          cache: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy (vuln, misconfig, secret)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          skip-setup-trivy: true
           scan-type: fs
           scan-ref: .
           scanners: vuln,misconfig,secret
