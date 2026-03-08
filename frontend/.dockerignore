@@ -1,9 +1,26 @@
+# Build outputs / dependencies
 .next/
 out/
+dist/
 node_modules/
+coverage/
+
+# VCS / docs / local config
 .git
 .gitignore
+.gitattributes
+.github/
 *.md
-.env
-.env.local
+.idea/
 .vscode/
+
+# Local environment / secrets
+.env
+.env.*
+*.env
+
+# Logs / misc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

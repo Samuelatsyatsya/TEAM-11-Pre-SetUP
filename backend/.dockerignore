@@ -1,9 +1,22 @@
-target/
+# VCS / docs / local config
 .git
 .gitignore
+.gitattributes
+.github/
 *.md
-project_instructions_detailed_guide.md
 .idea/
-*.iml
 .vscode/
+*.iml
+
+# Local environment / secrets
 .env
+.env.*
+*.env
+
+# Build and temporary outputs
+target/
+logs/
+*.log
+src/test/
+.mvn/
+mvnw
