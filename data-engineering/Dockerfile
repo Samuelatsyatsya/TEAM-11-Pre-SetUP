@@ -17,4 +17,7 @@ COPY config.py etl_pipeline.py ./
 
 USER servicehub-etl
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import os,sys; sys.exit(0 if os.path.exists('/app/etl_pipeline.py') else 1)"
+
 CMD ["python", "etl_pipeline.py"]
