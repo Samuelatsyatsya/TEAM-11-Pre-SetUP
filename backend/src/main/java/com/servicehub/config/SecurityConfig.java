@@ -13,6 +13,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @Configuration
 @EnableWebSecurity
@@ -20,12 +22,23 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    private static final RequestMatcher BEARER_TOKEN_REQUEST_MATCHER = request -> {
+        String authorization = request.getHeader("Authorization");
+        return authorization != null && authorization.startsWith("Bearer ");
+    };
+
     private final JwtAuthFilter jwtAuthFilter;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable())
+            .csrf(csrf -> csrf.ignoringRequestMatchers(
+                new AntPathRequestMatcher("/api/v1/auth/**"),
+                new AntPathRequestMatcher("/swagger-ui/**"),
+                new AntPathRequestMatcher("/api-docs/**"),
+                new AntPathRequestMatcher("/actuator/health"),
+                BEARER_TOKEN_REQUEST_MATCHER
+            ))
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/**", "/swagger-ui/**", "/api-docs/**", "/actuator/health").permitAll()

@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
@@ -27,9 +28,11 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -57,6 +60,7 @@ public class AttachmentService {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "text/plain"
     );
+    private static final Pattern SAFE_EXTENSION_PATTERN = Pattern.compile("^\\.[a-z0-9]{1,10}$");
 
     @Transactional
     public AttachmentResponse uploadFile(Long requestId, MultipartFile file, UUID uploaderId) {
@@ -82,10 +86,7 @@ public class AttachmentService {
 
         // Generate stored file name
         String originalFileName = file.getOriginalFilename();
-        String extension = "";
-        if (originalFileName != null && originalFileName.contains(".")) {
-            extension = originalFileName.substring(originalFileName.lastIndexOf("."));
-        }
+        String extension = extractSafeExtension(originalFileName);
         String storedFileName = UUID.randomUUID() + extension;
 
         // Compute SHA-256 checksum
@@ -103,13 +104,21 @@ public class AttachmentService {
         }
 
         // Save file to disk
+        Path filePath;
         try {
-            Path uploadPath = Paths.get(uploadDir);
-            if (!Files.exists(uploadPath)) {
+            Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+            if (Files.notExists(uploadPath)) {
                 Files.createDirectories(uploadPath);
             }
-            Path filePath = uploadPath.resolve(storedFileName);
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+            filePath = uploadPath.resolve(storedFileName).normalize();
+            if (!filePath.startsWith(uploadPath)) {
+                throw new BadRequestException("Invalid attachment path");
+            }
+
+            try (InputStream in = file.getInputStream()) {
+                Files.copy(in, filePath, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             throw new BadRequestException("Failed to save file: " + e.getMessage());
         }
@@ -118,7 +127,7 @@ public class AttachmentService {
                 .request(request)
                 .fileName(originalFileName != null ? originalFileName : storedFileName)
                 .storedFileName(storedFileName)
-                .filePath(Paths.get(uploadDir, storedFileName).toString())
+                .filePath(filePath.toString())
                 .contentType(contentType)
                 .fileSizeBytes(file.getSize())
                 .checksum(checksum)
@@ -151,7 +160,12 @@ public class AttachmentService {
         }
 
         try {
-            Path filePath = Paths.get(attachment.getFilePath());
+            Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+            Path filePath = Paths.get(attachment.getFilePath()).toAbsolutePath().normalize();
+            if (!filePath.startsWith(uploadPath)) {
+                throw new BadRequestException("Invalid attachment path");
+            }
+
             Resource resource = new UrlResource(filePath.toUri());
             if (!resource.exists() || !resource.isReadable()) {
                 throw new ResourceNotFoundException("File not found on disk: " + attachment.getStoredFileName());
@@ -187,5 +201,19 @@ public class AttachmentService {
                 .uploadedById(a.getUploadedBy() != null ? a.getUploadedBy().getId() : null)
                 .createdAt(a.getCreatedAt())
                 .build();
+    }
+
+    private String extractSafeExtension(String originalFileName) {
+        if (originalFileName == null) {
+            return "";
+        }
+
+        int lastDot = originalFileName.lastIndexOf('.');
+        if (lastDot < 0 || lastDot == originalFileName.length() - 1) {
+            return "";
+        }
+
+        String extension = originalFileName.substring(lastDot).toLowerCase(Locale.ROOT);
+        return SAFE_EXTENSION_PATTERN.matcher(extension).matches() ? extension : "";
     }
 }
