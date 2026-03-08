@@ -45,6 +45,7 @@ public class ServiceRequestService {
     private final StatusHistoryService statusHistoryService;
     private final LocationRepository locationRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final SlaTrackingService slaTrackingService;
 
     private static final Map<RequestStatus, Set<RequestStatus>> ALLOWED_TRANSITIONS;
 
@@ -156,7 +157,7 @@ public class ServiceRequestService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + actorId));
 
         RequestStatus currentStatus = serviceRequest.getStatus();
-        RequestStatus newStatus = RequestStatus.valueOf(request.getNewStatus().toUpperCase());
+        RequestStatus newStatus = RequestStatus.valueOf(request.newStatus().toUpperCase());
 
         // Validate status transition
         Set<RequestStatus> allowed = ALLOWED_TRANSITIONS.getOrDefault(currentStatus, EnumSet.noneOf(RequestStatus.class));
@@ -171,15 +172,15 @@ public class ServiceRequestService {
 
         if (newStatus == RequestStatus.IN_PROGRESS) {
             serviceRequest.setRespondedAt(now);
-            if (serviceRequest.getResponseSlaDeadline() != null) {
-                serviceRequest.setResponseSlaMet(now.isBefore(serviceRequest.getResponseSlaDeadline()));
+            if (serviceRequest.getResponseDueAt() != null) {
+                serviceRequest.setResponseSlaMet(now.isBefore(serviceRequest.getResponseDueAt()));
             }
         }
 
         if (newStatus == RequestStatus.RESOLVED) {
             serviceRequest.setResolvedAt(now);
-            if (serviceRequest.getResolutionSlaDeadline() != null) {
-                serviceRequest.setResolutionSlaMet(now.isBefore(serviceRequest.getResolutionSlaDeadline()));
+            if (serviceRequest.getResolutionDueAt() != null) {
+                serviceRequest.setResolutionSlaMet(now.isBefore(serviceRequest.getResolutionDueAt()));
             }
         }
 
@@ -195,8 +196,8 @@ public class ServiceRequestService {
             serviceRequest.setRespondedAt(null);
             slaPolicyRepository.findByCategoryIdAndPriority(categoryId, requestPriority)
                     .ifPresent(sla -> {
-                        serviceRequest.setResponseSlaDeadline(now.plusMinutes(sla.getResponseTimeMinutes()));
-                        serviceRequest.setResolutionSlaDeadline(now.plusMinutes(sla.getResolutionTimeMinutes()));
+                        serviceRequest.setResponseDueAt(now.plusHours(sla.getResponseTimeHours()));
+                        serviceRequest.setResolutionDueAt(now.plusHours(sla.getResolutionTimeHours()));
                     });
         }
 
@@ -206,7 +207,7 @@ public class ServiceRequestService {
                 .fromStatus(fromStatus)
                 .toStatus(newStatus.name())
                 .changedBy(actor)
-                .comment(request.getComment())
+                .comment(request.comment())
                 .build();
         statusHistoryRepository.save(history);
 
@@ -224,7 +225,7 @@ public class ServiceRequestService {
             eventType = "REQUEST_REOPENED";
         }
         if (eventType != null) {
-            eventPublisher.publishEvent(new ServiceRequestEvent(this, saved, eventType, actor, request.getComment()));
+            eventPublisher.publishEvent(new ServiceRequestEvent(this, saved, eventType, actor, request.comment()));
         }
 
         return toResponse(saved);
@@ -430,16 +431,16 @@ public class ServiceRequestService {
     }
 
     private StatusHistoryResponse toHistoryResponse(StatusHistory h) {
-        return StatusHistoryResponse.builder()
-                .id(h.getId())
-                .fromStatus(h.getFromStatus())
-                .toStatus(h.getToStatus())
-                .changedByName(h.getChangedBy() != null ? h.getChangedBy().getFullName() : null)
-                .changedById(h.getChangedBy() != null ? h.getChangedBy().getId() : null)
-                .fromAgentName(h.getFromAgent() != null ? h.getFromAgent().getFullName() : null)
-                .toAgentName(h.getToAgent() != null ? h.getToAgent().getFullName() : null)
-                .comment(h.getComment())
-                .changedAt(h.getChangedAt())
-                .build();
+        return new StatusHistoryResponse(
+                h.getId(),
+                h.getFromStatus(),
+                h.getToStatus(),
+                h.getChangedBy() != null ? h.getChangedBy().getFullName() : null,
+                h.getChangedBy() != null ? h.getChangedBy().getId() : null,
+                h.getFromAgent() != null ? h.getFromAgent().getFullName() : null,
+                h.getToAgent() != null ? h.getToAgent().getFullName() : null,
+                h.getComment(),
+                h.getChangedAt()
+        );
     }
 }

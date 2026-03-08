@@ -43,10 +43,10 @@ public class SlaMonitoringService {
     }
 
     private void checkResponseSla(ServiceRequest request, LocalDateTime now) {
-        if (request.getResponseSlaDeadline() == null || request.getRespondedAt() != null) return;
+        if (request.getResponseDueAt() == null || request.getRespondedAt() != null) return;
 
         // Check breach
-        if (now.isAfter(request.getResponseSlaDeadline())) {
+        if (now.isAfter(request.getResponseDueAt())) {
             if (request.getResponseSlaMet() == null || request.getResponseSlaMet()) {
                 request.setResponseSlaMet(false);
                 serviceRequestRepository.save(request);
@@ -62,7 +62,7 @@ public class SlaMonitoringService {
         }
 
         // Check 75% warning
-        long totalMinutes = ChronoUnit.MINUTES.between(request.getCreatedAt(), request.getResponseSlaDeadline());
+        long totalMinutes = ChronoUnit.MINUTES.between(request.getCreatedAt(), request.getResponseDueAt());
         long elapsedMinutes = ChronoUnit.MINUTES.between(request.getCreatedAt(), now);
         if (totalMinutes > 0 && elapsedMinutes >= (totalMinutes * 75 / 100)) {
             String eventId = "SLA_WARNING:" + request.getId() + ":response";
@@ -75,10 +75,10 @@ public class SlaMonitoringService {
     }
 
     private void checkResolutionSla(ServiceRequest request, LocalDateTime now) {
-        if (request.getResolutionSlaDeadline() == null || request.getResolvedAt() != null) return;
+        if (request.getResolutionDueAt() == null || request.getResolvedAt() != null) return;
 
         // Check breach
-        if (now.isAfter(request.getResolutionSlaDeadline())) {
+        if (now.isAfter(request.getResolutionDueAt())) {
             if (request.getResolutionSlaMet() == null || request.getResolutionSlaMet()) {
                 request.setResolutionSlaMet(false);
                 serviceRequestRepository.save(request);
@@ -94,7 +94,7 @@ public class SlaMonitoringService {
         }
 
         // Check 75% warning
-        long totalMinutes = ChronoUnit.MINUTES.between(request.getCreatedAt(), request.getResolutionSlaDeadline());
+        long totalMinutes = ChronoUnit.MINUTES.between(request.getCreatedAt(), request.getResolutionDueAt());
         long elapsedMinutes = ChronoUnit.MINUTES.between(request.getCreatedAt(), now);
         if (totalMinutes > 0 && elapsedMinutes >= (totalMinutes * 75 / 100)) {
             String eventId = "SLA_WARNING:" + request.getId() + ":resolution";

@@ -1,32 +1,23 @@
--- =============================================================================
 -- ServiceHub — V2: Seed Data (Development & Testing)
--- =============================================================================
 -- Bootstraps the system with locations, departments, categories, SLA policies,
 -- and test users so the team can begin development immediately.
 --
 -- IMPORTANT: These are dev/test seed values only.
 -- In production, ADMIN creates all entities via the admin UI.
--- =============================================================================
 
--- ---------------------------------------------------------------------------
 -- Seed Locations
--- ---------------------------------------------------------------------------
 INSERT INTO locations (name, address, city) VALUES
     ('Accra HQ',         'Independence Ave, Accra',    'Accra'),
     ('Takoradi Branch',  'Market Circle, Takoradi',    'Takoradi'),
     ('Kumasi Branch',    'Adum Road, Kumasi',          'Kumasi');
 
--- ---------------------------------------------------------------------------
 -- Seed Departments
--- ---------------------------------------------------------------------------
 INSERT INTO departments (name, description) VALUES
     ('IT Department',           'Handles all IT infrastructure, software, and hardware requests'),
     ('Facilities Management',   'Manages building, office space, and physical infrastructure requests'),
     ('Human Resources',         'Processes HR-related requests including policies, benefits, and onboarding');
 
--- ---------------------------------------------------------------------------
 -- Seed Categories (many-to-one with departments)
--- ---------------------------------------------------------------------------
 INSERT INTO categories (name, key, description, department_id) VALUES
     -- IT Department
     ('Network Issues',          'NETWORK_ISSUES',       'Wi-Fi, LAN, VPN, and connectivity problems',
@@ -50,9 +41,7 @@ INSERT INTO categories (name, key, description, department_id) VALUES
     ('Benefits Query',          'BENEFITS_QUERY',       'Health insurance, pension, and allowance queries',
         (SELECT id FROM departments WHERE name = 'Human Resources'));
 
--- ---------------------------------------------------------------------------
 -- Seed SLA Policies (9 categories x 4 priorities = 36 policies)
--- ---------------------------------------------------------------------------
 -- Response = time until first agent response; Resolution = time to close.
 -- Values in minutes. Tuned per category — Admin can adjust at any time.
 
@@ -105,9 +94,7 @@ INSERT INTO sla_policies (category_id, priority, response_time_minutes, resoluti
     ((SELECT id FROM categories WHERE key = 'BENEFITS_QUERY'), 'MEDIUM',    120,   1440),
     ((SELECT id FROM categories WHERE key = 'BENEFITS_QUERY'), 'LOW',       240,   2880);
 
--- ---------------------------------------------------------------------------
 -- Seed Users
--- ---------------------------------------------------------------------------
 -- Passwords are BCrypt-hashed. The team should use these for development only.
 --
 -- Plaintext passwords:
@@ -117,7 +104,6 @@ INSERT INTO sla_policies (category_id, priority, response_time_minutes, resoluti
 --
 -- BCrypt hash (cost 12) — generate with: htpasswd -nbBC 12 "" "password" | cut -d: -f2
 -- These are pre-computed hashes for the seed passwords above.
--- ---------------------------------------------------------------------------
 
 -- ADMIN
 INSERT INTO users (email, password_hash, full_name, role, location_id) VALUES

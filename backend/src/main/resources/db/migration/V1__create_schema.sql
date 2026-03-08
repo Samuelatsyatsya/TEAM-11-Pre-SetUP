@@ -1,19 +1,14 @@
--- =============================================================================
 -- ServiceHub — V1: Core Schema
--- =============================================================================
 -- Flyway migration: creates all tables, indexes, and constraints.
 -- Tables: locations, departments, categories, users, service_requests,
 --         attachments, status_history, sla_policies, audit_logs, notification_logs
 --
 -- Enum values stored as VARCHAR with CHECK constraints (JPA compatible).
--- =============================================================================
 
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- =============================================================================
 -- 1. locations
--- =============================================================================
 CREATE TABLE locations (
     id              BIGSERIAL       PRIMARY KEY,
     name            VARCHAR(100)    NOT NULL,
@@ -25,9 +20,7 @@ CREATE TABLE locations (
     CONSTRAINT uq_locations_name UNIQUE (name)
 );
 
--- =============================================================================
 -- 2. departments
--- =============================================================================
 CREATE TABLE departments (
     id              BIGSERIAL       PRIMARY KEY,
     name            VARCHAR(100)    NOT NULL,
@@ -38,9 +31,7 @@ CREATE TABLE departments (
     CONSTRAINT uq_departments_name UNIQUE (name)
 );
 
--- =============================================================================
 -- 3. categories
--- =============================================================================
 CREATE TABLE categories (
     id              BIGSERIAL       PRIMARY KEY,
     name            VARCHAR(100)    NOT NULL,
@@ -55,9 +46,7 @@ CREATE TABLE categories (
     CONSTRAINT fk_categories_department FOREIGN KEY (department_id) REFERENCES departments (id)
 );
 
--- =============================================================================
 -- 4. users
--- =============================================================================
 CREATE TABLE users (
     id                          UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
     email                       VARCHAR(255)    NOT NULL,
@@ -76,9 +65,7 @@ CREATE TABLE users (
     CONSTRAINT chk_users_role CHECK (role IN ('ADMIN', 'AGENT', 'USER'))
 );
 
--- =============================================================================
 -- 5. service_requests
--- =============================================================================
 CREATE TABLE service_requests (
     id                          BIGSERIAL       PRIMARY KEY,
     reference_number            VARCHAR(20)     NOT NULL,
@@ -112,9 +99,7 @@ CREATE TABLE service_requests (
     CONSTRAINT chk_status CHECK (status IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'))
 );
 
--- =============================================================================
 -- 6. attachments
--- =============================================================================
 CREATE TABLE attachments (
     id                  BIGSERIAL       PRIMARY KEY,
     request_id          BIGINT          NOT NULL,
@@ -133,9 +118,7 @@ CREATE TABLE attachments (
     CONSTRAINT chk_file_size CHECK (file_size_bytes > 0 AND file_size_bytes <= 5242880)
 );
 
--- =============================================================================
 -- 7. status_history
--- =============================================================================
 CREATE TABLE status_history (
     id              BIGSERIAL       PRIMARY KEY,
     request_id      BIGINT          NOT NULL,
@@ -152,9 +135,7 @@ CREATE TABLE status_history (
     CONSTRAINT fk_status_history_to_agent FOREIGN KEY (to_agent_id) REFERENCES users (id)
 );
 
--- =============================================================================
 -- 8. sla_policies
--- =============================================================================
 CREATE TABLE sla_policies (
     id                          SERIAL          PRIMARY KEY,
     category_id                 BIGINT          NOT NULL,
@@ -172,9 +153,7 @@ CREATE TABLE sla_policies (
     CONSTRAINT chk_resolution_gte_response CHECK (resolution_time_minutes >= response_time_minutes)
 );
 
--- =============================================================================
 -- 9. audit_logs (APPEND-ONLY)
--- =============================================================================
 CREATE TABLE audit_logs (
     id              BIGSERIAL       PRIMARY KEY,
     action          VARCHAR(50)     NOT NULL,
@@ -193,9 +172,7 @@ CREATE TABLE audit_logs (
     CONSTRAINT fk_audit_logs_actor FOREIGN KEY (actor_id) REFERENCES users (id)
 );
 
--- =============================================================================
 -- 10. notification_logs
--- =============================================================================
 CREATE TABLE notification_logs (
     id                      BIGSERIAL       PRIMARY KEY,
     event_type              VARCHAR(50)     NOT NULL,
@@ -216,9 +193,7 @@ CREATE TABLE notification_logs (
     CONSTRAINT chk_notification_status CHECK (status IN ('PENDING', 'SENT', 'FAILED', 'RETRY'))
 );
 
--- =============================================================================
 -- INDEXES
--- =============================================================================
 CREATE INDEX idx_categories_department_id ON categories (department_id);
 
 CREATE INDEX idx_users_department_role ON users (department_id, role);
@@ -249,7 +224,5 @@ CREATE INDEX idx_notification_recipient ON notification_logs (recipient_id, even
 CREATE INDEX idx_notification_related_entity ON notification_logs (related_entity_type, related_entity_id);
 CREATE INDEX idx_notification_created_at ON notification_logs (created_at);
 
--- =============================================================================
 -- SECURITY: Revoke UPDATE/DELETE on audit_logs (append-only enforcement)
--- =============================================================================
 REVOKE UPDATE, DELETE ON audit_logs FROM PUBLIC;

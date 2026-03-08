@@ -32,6 +32,7 @@ public class RequestWorkflowService {
     private final StatusHistoryService statusHistoryService;
     private final UserRepository userRepository;
     private final StatusTransitionValidator statusTransitionValidator;
+    private final SlaTrackingService slaTrackingService;
   
 
     /**
@@ -122,4 +123,3 @@ public class RequestWorkflowService {
         );
     }
 }
-

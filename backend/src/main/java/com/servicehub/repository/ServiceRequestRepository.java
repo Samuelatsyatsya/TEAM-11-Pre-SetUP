@@ -14,5 +14,5 @@ public interface ServiceRequestRepository extends JpaRepository<ServiceRequest, 
     List<ServiceRequest> findByAssignedAgentId(UUID agentId);
     List<ServiceRequest> findByRequesterId(UUID requesterId);
     Long countByStatus(RequestStatus status);
-    List<ServiceRequest> findByResolutionSlaDeadlineBeforeAndStatusNotIn(LocalDateTime deadline, List<RequestStatus> statuses);
+    List<ServiceRequest> findByResolutionDueAtBeforeAndStatusNotIn(LocalDateTime deadline, List<RequestStatus> statuses);
 }
