@@ -1,174 +1,164 @@
-# =============================================================================
-# ServiceHub — Docker Compose (Development)
-# =============================================================================
-# Usage:
-#   1. Copy .env.example to .env and fill in values
-#   2. Run: docker-compose up --build
-#   3. Frontend:  http://localhost:3000
-#   4. API:       http://localhost:8080/api/v1/
-#   5. Swagger:   http://localhost:8080/api/docs
-#   6. MailHog:   http://localhost:8025
-#   7. pgAdmin:   http://localhost:5050
-# =============================================================================
+name: servicehub
 
 services:
-
-  # ---------------------------------------------------------------------------
-  # PostgreSQL Database
-  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
-    container_name: servicehub-db
     restart: unless-stopped
+    command: ["postgres", "-p", "${DB_PORT}"]
     environment:
-      POSTGRES_DB: ${DB_NAME:-servicehub}
-      POSTGRES_USER: ${DB_USERNAME:-servicehub_app}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_use_strong_password}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      ANALYTICS_DB_USER: ${ANALYTICS_DB_USER}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${DB_PORT}:${DB_PORT}"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./devops/scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./devops/scripts/init-db.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-servicehub_app} -d ${DB_NAME:-servicehub}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME} -p ${DB_PORT}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
+    mem_limit: 512m
+    cpus: 0.50
 
-  # ---------------------------------------------------------------------------
-  # Spring Boot API
-  # ---------------------------------------------------------------------------
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: servicehub-api
+      args:
+        APP_PORT: ${API_PORT}
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     ports:
-      - "8080:8080"
+      - "${API_PORT}:${API_PORT}"
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:${DB_PORT:-5432}/${DB_NAME:-servicehub}
-      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-servicehub_app}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-changeme_use_strong_password}
-      JWT_SECRET: ${JWT_SECRET:-changeme_generate_a_256bit_secret_key}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
-      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-604800000}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
-      FILE_UPLOAD_DIR: /data/uploads
-      FILE_MAX_SIZE_MB: ${FILE_MAX_SIZE_MB:-5}
-      FILE_MAX_PER_REQUEST: ${FILE_MAX_PER_REQUEST:-5}
-      MAIL_HOST: ${MAIL_HOST:-mailhog}
-      MAIL_PORT: ${MAIL_PORT:-1025}
-      MAIL_USERNAME: ${MAIL_USERNAME:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_FROM: ${MAIL_FROM:-noreply@servicehub.local}
-      MAIL_ENABLED: ${MAIL_ENABLED:-true}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      JAVA_OPTS: "-Xms256m -Xmx512m"
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SERVER_PORT: ${API_PORT}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS}
+      CORS_ALLOWED_ORIGINS: http://localhost:${FRONTEND_PORT}
+      FILE_UPLOAD_DIR: ${FILE_UPLOAD_DIR}
+      FILE_MAX_SIZE_MB: ${FILE_MAX_SIZE_MB}
+      FILE_MAX_PER_REQUEST: ${FILE_MAX_PER_REQUEST}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_ENABLED: ${MAIL_ENABLED}
+      FRONTEND_URL: http://localhost:${FRONTEND_PORT}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS}
     volumes:
       - uploads_data:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:${API_PORT}/actuator/health > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 90s
-    deploy:
-      resources:
-        limits:
-          memory: 768M
-          cpus: "1.0"
+    mem_limit: 768m
+    cpus: 1.00
 
-  # ---------------------------------------------------------------------------
-  # Next.js Frontend
-  # ---------------------------------------------------------------------------
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/v1}
-    container_name: servicehub-frontend
+        APP_PORT: ${FRONTEND_PORT}
+        NEXT_PUBLIC_API_URL: http://localhost:${API_PORT}/api/v1
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/v1}
-      # Server-side API URL (container-to-container for SSR)
-      API_INTERNAL_URL: http://api:8080/api/v1
+      PORT: ${FRONTEND_PORT}
+      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT}/api/v1
+      API_INTERNAL_URL: http://api:${API_PORT}/api/v1
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:${FRONTEND_PORT} > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
+    mem_limit: 512m
+    cpus: 0.50
 
-  # ---------------------------------------------------------------------------
-  # MailHog — SMTP Trap (Development & Testing Only)
-  # ---------------------------------------------------------------------------
-  # Catches all outgoing emails so no real emails are sent during development.
-  # Web UI at http://localhost:8025 to view captured emails.
-  # SMTP at port 1025 (no auth required).
+  data-engineering:
+    build:
+      context: ./data-engineering
+      dockerfile: Dockerfile
+    restart: "no"
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - etl
+
   mailhog:
-    image: mailhog/mailhog:latest
-    container_name: servicehub-mailhog
-    restart: unless-stopped
-    ports:
-      - "1025:1025"   # SMTP
-      - "8025:8025"   # Web UI
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: "0.25"
-
-  # ---------------------------------------------------------------------------
-  # pgAdmin — Database Admin UI (Development Only)
-  # ---------------------------------------------------------------------------
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: servicehub-pgadmin
+    image: mailhog/mailhog:v1.0.1
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@servicehub.local}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      MH_SMTP_BIND_ADDR: 0.0.0.0:${MAIL_PORT}
+      MH_UI_BIND_ADDR: 0.0.0.0:${MAIL_UI_PORT}
+    ports:
+      - "${MAIL_PORT}:${MAIL_PORT}"
+      - "${MAIL_UI_PORT}:${MAIL_UI_PORT}"
+    mem_limit: 128m
+    cpus: 0.25
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_LISTEN_PORT: ${PGADMIN_PORT}
       PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
-      - "5050:80"
+      - "${PGADMIN_PORT}:${PGADMIN_PORT}"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
       postgres:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.25"
+    mem_limit: 256m
+    cpus: 0.25
     profiles:
       - dev
 
-# =============================================================================
-# Named Volumes
-# =============================================================================
 volumes:
   pgdata:
     name: servicehub-pgdata
