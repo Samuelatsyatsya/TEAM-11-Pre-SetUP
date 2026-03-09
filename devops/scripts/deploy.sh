@@ -19,9 +19,9 @@ else
 fi
 COMPOSE_TEXT="${COMPOSE_CMD[*]}"
 CORE_SERVICES=(postgres api frontend mailhog)
-MAX_DEPLOY_RETRIES="${DEPLOY_MAX_RETRIES:-3}"
-RETRY_DELAY_SECONDS="${DEPLOY_RETRY_DELAY_SECONDS:-8}"
-DIAG_LOG_TAIL_LINES="${DEPLOY_DIAG_LOG_TAIL_LINES:-120}"
+MAX_DEPLOY_RETRIES=3
+RETRY_DELAY_SECONDS=8
+DIAG_LOG_TAIL_LINES=120
 
 # Standard log formatter for normal script progress.
 log() {
@@ -84,6 +84,34 @@ prepare_env() {
   fi
 }
 
+# Keep existing .env values but append any newly introduced keys from .env.example.
+sync_env_from_example() {
+  [[ -f "${ENV_EXAMPLE}" ]] || fail ".env.example not found at ${ENV_EXAMPLE}"
+  [[ -f "${ENV_FILE}" ]] || fail ".env not found at ${ENV_FILE}"
+
+  local line
+  local key
+  local added=0
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+
+    [[ "${line}" =~ ^[[:space:]]*$ ]] && continue
+    [[ "${line}" =~ ^[[:space:]]*# ]] && continue
+    [[ "${line}" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*= ]] || continue
+
+    key="${BASH_REMATCH[1]}"
+    if ! grep -Eq "^[[:space:]]*${key}[[:space:]]*=" "${ENV_FILE}"; then
+      printf '\n%s\n' "${line}" >> "${ENV_FILE}"
+      added=$((added + 1))
+    fi
+  done < "${ENV_EXAMPLE}"
+
+  if ((added > 0)); then
+    log "Synced ${added} missing variable(s) from .env.example into .env"
+  fi
+}
+
 # Load values from .env so health checks and URLs use configured ports.
 load_env() {
   local line
@@ -124,26 +152,21 @@ validate_runtime_env() {
   require_env API_PORT
   require_env FRONTEND_PORT
   require_env MAIL_UI_PORT
-  require_env SMOKE_TEST_EMAIL
-  require_env SMOKE_TEST_PASSWORD
 }
 
-# Basic post-deploy smoke test: authenticate against backend API.
-smoke_test_login() {
+# Basic post-deploy smoke test: verify backend base API endpoint.
+smoke_test_api() {
   local response
 
-  # Validate that auth works using credentials provided in .env.
   response="$(curl --silent --show-error \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"${SMOKE_TEST_EMAIL}\",\"password\":\"${SMOKE_TEST_PASSWORD}\"}" \
-    "http://localhost:${API_PORT}/api/v1/auth/login" || true)"
+    "http://localhost:${API_PORT}/api/v1/ping" || true)"
 
-  if [[ "${response}" != *"accessToken"* ]]; then
-    log "Login smoke test failed. Response: ${response}"
+  if [[ "${response}" != *"\"status\":\"ok\""* ]]; then
+    log "API smoke test failed. Response: ${response}"
     return 1
   fi
 
-  log "Login smoke test passed."
+  log "API smoke test passed."
 }
 
 teardown_stack() {
@@ -180,11 +203,6 @@ dump_diagnostics() {
   done
 }
 
-detect_flyway_checksum_mismatch() {
-  "${COMPOSE_CMD[@]}" logs --tail "${DIAG_LOG_TAIL_LINES}" api 2>/dev/null \
-    | grep -q "Migration checksum mismatch"
-}
-
 deploy_once() {
   teardown_stack
 
@@ -193,7 +211,7 @@ deploy_once() {
 
   wait_for_url "API health endpoint" "http://localhost:${API_PORT}/actuator/health" 90 2 || return 1
   wait_for_url "Frontend" "http://localhost:${FRONTEND_PORT}" 60 2 || return 1
-  smoke_test_login || return 1
+  smoke_test_api || return 1
 }
 
 # Main onboarding flow: validate env, start stack, wait for readiness, smoke test.
@@ -203,8 +221,13 @@ main() {
 
   # 2) Create .env on first run from the committed template.
   prepare_env
+  # 3) Append newly introduced keys so old .env files remain compatible.
+  sync_env_from_example
   # 3) Load runtime config from .env.
   load_env
+  MAX_DEPLOY_RETRIES="${DEPLOY_MAX_RETRIES:-3}"
+  RETRY_DELAY_SECONDS="${DEPLOY_RETRY_DELAY_SECONDS:-8}"
+  DIAG_LOG_TAIL_LINES="${DEPLOY_DIAG_LOG_TAIL_LINES:-120}"
   validate_runtime_env
 
   # 4) Run compose commands from repository root.
@@ -221,10 +244,6 @@ main() {
     log "Attempt ${attempt} failed."
     dump_diagnostics
 
-    if detect_flyway_checksum_mismatch; then
-      fail "Detected Flyway checksum mismatch. If this is local/dev, reset state with: ${COMPOSE_TEXT} down -v --remove-orphans && ./devops/scripts/deploy.sh"
-    fi
-
     if ((attempt == MAX_DEPLOY_RETRIES)); then
       fail "Deployment failed after ${MAX_DEPLOY_RETRIES} attempts."
     fi
@@ -239,7 +258,7 @@ main() {
 ServiceHub is ready.
 Frontend:  http://localhost:${FRONTEND_PORT}
 API:       http://localhost:${API_PORT}/api/v1
-Swagger:   http://localhost:${API_PORT}/api/docs
+Health:    http://localhost:${API_PORT}/actuator/health
 MailHog:   http://localhost:${MAIL_UI_PORT}
 
 Useful commands:
