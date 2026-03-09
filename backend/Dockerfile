@@ -41,4 +41,7 @@ ENV JAVA_TOOL_OPTIONS=""
 
 EXPOSE ${APP_PORT}
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl --fail --silent "http://${APP_HEALTHCHECK_HOST}:${APP_PORT}${APP_HEALTHCHECK_PATH}" >/dev/null || exit 1
+
 ENTRYPOINT ["java", "-jar", "app.jar"]

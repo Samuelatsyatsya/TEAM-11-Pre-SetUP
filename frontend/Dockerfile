@@ -59,4 +59,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=${NEXT_TELEMETRY_DISABLED}
 ENV FRONTEND_HEALTHCHECK_URL=${FRONTEND_HEALTHCHECK_URL}
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl --fail --silent "${FRONTEND_HEALTHCHECK_URL}" >/dev/null || exit 1
+
 CMD ["node", "server.js"]

@@ -25,4 +25,7 @@ COPY config.py etl_pipeline.py ./
 
 USER ${ETL_USER}
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import os,sys; sys.exit(0 if os.path.exists(os.getenv('ETL_ENTRYPOINT', '')) else 1)"
+
 CMD ["sh", "-c", "python ${ETL_ENTRYPOINT}"]
