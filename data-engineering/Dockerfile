@@ -1,23 +1,31 @@
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1
+
+ARG DATA_ENGINEERING_PYTHON_IMAGE
+FROM ${DATA_ENGINEERING_PYTHON_IMAGE}
+
+ARG ETL_WORKDIR
+ARG ETL_USER
+ARG ETL_GROUP
+ARG ETL_ENTRYPOINT
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    ETL_ENTRYPOINT=${ETL_ENTRYPOINT}
 
-WORKDIR /app
+WORKDIR ${ETL_WORKDIR}
 
-# Create an unprivileged runtime user.
-RUN groupadd --system servicehub-etl \
-    && useradd --system --gid servicehub-etl --home /app --shell /usr/sbin/nologin servicehub-etl
+RUN groupadd --system ${ETL_GROUP} \
+    && useradd --system --gid ${ETL_GROUP} --home ${ETL_WORKDIR} --shell /usr/sbin/nologin ${ETL_USER}
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY config.py etl_pipeline.py ./
 
-USER servicehub-etl
+USER ${ETL_USER}
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import os,sys; sys.exit(0 if os.path.exists('/app/etl_pipeline.py') else 1)"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import os,sys; sys.exit(0 if os.path.exists(os.getenv('ETL_ENTRYPOINT', '')) else 1)"
 
-CMD ["python", "etl_pipeline.py"]
+CMD ["sh", "-c", "python ${ETL_ENTRYPOINT}"]

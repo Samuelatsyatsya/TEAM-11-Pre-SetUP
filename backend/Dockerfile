@@ -1,47 +1,47 @@
-# ServiceHub Backend — Multi-Stage Dockerfile
-# Stage 1: Build (Maven + JDK 17)
-# Stage 2: Runtime (JRE 17 slim — no build tools in final image)
+# syntax=docker/dockerfile:1
 
-FROM maven:3.9-eclipse-temurin-17 AS build
+ARG BACKEND_BUILD_IMAGE
+ARG BACKEND_RUNTIME_IMAGE
+FROM ${BACKEND_BUILD_IMAGE} AS build
 
 WORKDIR /workspace
 
-# Copy pom.xml first so Maven dependency layers stay cacheable.
 COPY pom.xml ./
 RUN mvn -B -DskipTests dependency:go-offline
 
-# Copy source code and package.
 COPY src ./src
 RUN mvn -B -DskipTests package
 
-FROM eclipse-temurin:17-jre-jammy AS runtime
+FROM ${BACKEND_RUNTIME_IMAGE} AS runtime
 
-WORKDIR /app
+ARG APP_USER
+ARG APP_GROUP
+ARG APP_HOME
+ARG APP_PORT
+ARG APP_HEALTHCHECK_HOST
+ARG APP_HEALTHCHECK_PATH
 
-ARG APP_PORT=8080
+WORKDIR ${APP_HOME}
 
-# Install curl for container health checks and create an unprivileged user.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system servicehub \
-    && useradd --system --gid servicehub --home /app --shell /usr/sbin/nologin servicehub \
-    && mkdir -p /data/uploads \
-    && chown -R servicehub:servicehub /app /data/uploads
+    && groupadd --system ${APP_GROUP} \
+    && useradd --system --gid ${APP_GROUP} --home ${APP_HOME} --shell /usr/sbin/nologin ${APP_USER} \
+    && chown -R ${APP_USER}:${APP_GROUP} ${APP_HOME}
 
-# Copy the Spring Boot fat jar.
-COPY --from=build /workspace/target/*.jar /app/app.jar
+COPY --from=build /workspace/target/*.jar ${APP_HOME}/app.jar
 
-USER servicehub
+USER ${APP_USER}
 
 ENV SERVER_PORT=${APP_PORT}
+ENV APP_HEALTHCHECK_HOST=${APP_HEALTHCHECK_HOST}
+ENV APP_HEALTHCHECK_PATH=${APP_HEALTHCHECK_PATH}
+ENV JAVA_TOOL_OPTIONS=""
 
 EXPOSE ${APP_PORT}
 
-# JAVA_TOOL_OPTIONS is read automatically by the JVM.
-ENV JAVA_TOOL_OPTIONS=""
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl --fail --silent "http://${APP_HEALTHCHECK_HOST}:${APP_PORT}${APP_HEALTHCHECK_PATH}" >/dev/null || exit 1
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-  CMD curl --fail --silent http://localhost:${SERVER_PORT}/actuator/health > /dev/null || exit 1
-
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
