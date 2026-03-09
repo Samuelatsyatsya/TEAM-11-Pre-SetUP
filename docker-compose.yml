@@ -1,9 +1,9 @@
-name: servicehub
+name: ${COMPOSE_PROJECT_NAME}
 
 services:
   postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
+    image: ${POSTGRES_IMAGE}
+    restart: ${POSTGRES_RESTART_POLICY}
     command: ["postgres", "-p", "${DB_PORT}"]
     environment:
       POSTGRES_DB: ${DB_NAME}
@@ -15,106 +15,117 @@ services:
       - "${DB_PORT}:${DB_PORT}"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./devops/scripts/init-db.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+      - ${POSTGRES_INIT_SCRIPT}:/docker-entrypoint-initdb.d/01-init.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME} -p ${DB_PORT}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    mem_limit: 512m
-    cpus: 0.50
+      interval: ${DOCKER_HEALTHCHECK_INTERVAL}
+      timeout: ${DOCKER_HEALTHCHECK_TIMEOUT}
+      retries: ${DOCKER_HEALTHCHECK_RETRIES}
+      start_period: ${POSTGRES_HEALTHCHECK_START_PERIOD}
+    mem_limit: ${POSTGRES_MEM_LIMIT}
+    cpus: ${POSTGRES_CPUS}
 
   api:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: ${BACKEND_BUILD_CONTEXT}
+      dockerfile: ${BACKEND_DOCKERFILE}
       args:
+        BACKEND_BUILD_IMAGE: ${BACKEND_BUILD_IMAGE}
+        BACKEND_RUNTIME_IMAGE: ${BACKEND_RUNTIME_IMAGE}
+        APP_USER: ${BACKEND_APP_USER}
+        APP_GROUP: ${BACKEND_APP_GROUP}
+        APP_HOME: ${BACKEND_APP_HOME}
         APP_PORT: ${API_PORT}
-    restart: unless-stopped
-    init: true
+        APP_HEALTHCHECK_HOST: ${API_HEALTHCHECK_HOST}
+        APP_HEALTHCHECK_PATH: ${API_HEALTHCHECK_PATH}
+    restart: ${API_RESTART_POLICY}
+    init: ${CONTAINER_INIT}
     security_opt:
-      - no-new-privileges:true
-    read_only: true
+      - no-new-privileges:${CONTAINER_NO_NEW_PRIVILEGES}
+    read_only: ${API_READ_ONLY}
     tmpfs:
-      - /tmp
+      - ${API_TMPFS_PATH}
     ports:
       - "${API_PORT}:${API_PORT}"
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SERVER_PORT: ${API_PORT}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
-      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS}
-      CORS_ALLOWED_ORIGINS: http://localhost:${FRONTEND_PORT}
-      FILE_UPLOAD_DIR: ${FILE_UPLOAD_DIR}
-      FILE_MAX_SIZE_MB: ${FILE_MAX_SIZE_MB}
-      FILE_MAX_PER_REQUEST: ${FILE_MAX_PER_REQUEST}
-      MAIL_HOST: ${MAIL_HOST}
-      MAIL_PORT: ${MAIL_PORT}
-      MAIL_USERNAME: ${MAIL_USERNAME}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      MAIL_FROM: ${MAIL_FROM}
-      MAIL_ENABLED: ${MAIL_ENABLED}
-      FRONTEND_URL: http://localhost:${FRONTEND_PORT}
+      SPRING_APPLICATION_NAME: ${SPRING_APPLICATION_NAME}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      APP_VERSION: ${APP_VERSION}
+      APP_ENV: ${APP_ENV}
+      APP_API_BASE_PATH: ${APP_API_BASE_PATH}
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE}
+      MANAGEMENT_HEALTH_PROBES_ENABLED: ${MANAGEMENT_HEALTH_PROBES_ENABLED}
+      MANAGEMENT_HEALTH_SHOW_DETAILS: ${MANAGEMENT_HEALTH_SHOW_DETAILS}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      CORS_ALLOWED_METHODS: ${CORS_ALLOWED_METHODS}
+      CORS_ALLOWED_HEADERS: ${CORS_ALLOWED_HEADERS}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS}
       JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS}
-    volumes:
-      - uploads_data:/data/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://localhost:${API_PORT}/actuator/health > /dev/null || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 90s
-    mem_limit: 768m
-    cpus: 1.00
+      test: ["CMD-SHELL", "curl --fail --silent ${API_HEALTHCHECK_SCHEME}://${API_HEALTHCHECK_HOST}:${API_PORT}${API_HEALTHCHECK_PATH} > /dev/null || exit 1"]
+      interval: ${DOCKER_HEALTHCHECK_INTERVAL}
+      timeout: ${DOCKER_HEALTHCHECK_TIMEOUT}
+      retries: ${DOCKER_HEALTHCHECK_RETRIES}
+      start_period: ${API_HEALTHCHECK_START_PERIOD}
+    mem_limit: ${API_MEM_LIMIT}
+    cpus: ${API_CPUS}
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: ${FRONTEND_BUILD_CONTEXT}
+      dockerfile: ${FRONTEND_DOCKERFILE}
       args:
+        FRONTEND_NODE_IMAGE: ${FRONTEND_NODE_IMAGE}
         APP_PORT: ${FRONTEND_PORT}
-        NEXT_PUBLIC_API_URL: http://localhost:${API_PORT}/api/v1
-    restart: unless-stopped
-    init: true
+        APP_BIND_HOST: ${FRONTEND_BIND_HOST}
+        APP_USER: ${FRONTEND_APP_USER}
+        APP_GROUP: ${FRONTEND_APP_GROUP}
+        APP_HOME: ${FRONTEND_APP_HOME}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        FRONTEND_HEALTHCHECK_URL: ${FRONTEND_HEALTHCHECK_SCHEME}://${FRONTEND_HEALTHCHECK_HOST}:${FRONTEND_PORT}${FRONTEND_HEALTHCHECK_PATH}
+        NEXT_TELEMETRY_DISABLED: ${NEXT_TELEMETRY_DISABLED}
+    restart: ${FRONTEND_RESTART_POLICY}
+    init: ${CONTAINER_INIT}
     security_opt:
-      - no-new-privileges:true
-    read_only: true
+      - no-new-privileges:${CONTAINER_NO_NEW_PRIVILEGES}
+    read_only: ${FRONTEND_READ_ONLY}
     tmpfs:
-      - /tmp
+      - ${FRONTEND_TMPFS_PATH}
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
     environment:
       PORT: ${FRONTEND_PORT}
-      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT}/api/v1
-      API_INTERNAL_URL: http://api:${API_PORT}/api/v1
+      HOSTNAME: ${FRONTEND_BIND_HOST}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+      NEXT_TELEMETRY_DISABLED: ${NEXT_TELEMETRY_DISABLED}
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://localhost:${FRONTEND_PORT} > /dev/null || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    mem_limit: 512m
-    cpus: 0.50
+      test: ["CMD-SHELL", "curl --fail --silent ${FRONTEND_HEALTHCHECK_SCHEME}://${FRONTEND_HEALTHCHECK_HOST}:${FRONTEND_PORT}${FRONTEND_HEALTHCHECK_PATH} > /dev/null || exit 1"]
+      interval: ${DOCKER_HEALTHCHECK_INTERVAL}
+      timeout: ${DOCKER_HEALTHCHECK_TIMEOUT}
+      retries: ${DOCKER_HEALTHCHECK_RETRIES}
+      start_period: ${FRONTEND_HEALTHCHECK_START_PERIOD}
+    mem_limit: ${FRONTEND_MEM_LIMIT}
+    cpus: ${FRONTEND_CPUS}
 
   data-engineering:
     build:
-      context: ./data-engineering
-      dockerfile: Dockerfile
-    restart: "no"
-    init: true
+      context: ${DATA_ENGINEERING_BUILD_CONTEXT}
+      dockerfile: ${DATA_ENGINEERING_DOCKERFILE}
+      args:
+        DATA_ENGINEERING_PYTHON_IMAGE: ${DATA_ENGINEERING_PYTHON_IMAGE}
+        ETL_WORKDIR: ${ETL_WORKDIR}
+        ETL_USER: ${ETL_USER}
+        ETL_GROUP: ${ETL_GROUP}
+        ETL_ENTRYPOINT: ${ETL_ENTRYPOINT}
+    restart: ${ETL_RESTART_POLICY}
+    init: ${CONTAINER_INIT}
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges:${CONTAINER_NO_NEW_PRIVILEGES}
     environment:
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
@@ -125,28 +136,28 @@ services:
       postgres:
         condition: service_healthy
     profiles:
-      - etl
+      - ${ETL_PROFILE}
 
   mailhog:
-    image: mailhog/mailhog:v1.0.1
-    restart: unless-stopped
+    image: ${MAILHOG_IMAGE}
+    restart: ${MAILHOG_RESTART_POLICY}
     environment:
-      MH_SMTP_BIND_ADDR: 0.0.0.0:${MAIL_PORT}
-      MH_UI_BIND_ADDR: 0.0.0.0:${MAIL_UI_PORT}
+      MH_SMTP_BIND_ADDR: ${MAILHOG_SMTP_BIND_ADDR}
+      MH_UI_BIND_ADDR: ${MAILHOG_UI_BIND_ADDR}
     ports:
       - "${MAIL_PORT}:${MAIL_PORT}"
       - "${MAIL_UI_PORT}:${MAIL_UI_PORT}"
-    mem_limit: 128m
-    cpus: 0.25
+    mem_limit: ${MAILHOG_MEM_LIMIT}
+    cpus: ${MAILHOG_CPUS}
 
   pgadmin:
-    image: dpage/pgadmin4:latest
-    restart: unless-stopped
+    image: ${PGADMIN_IMAGE}
+    restart: ${PGADMIN_RESTART_POLICY}
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
       PGADMIN_LISTEN_PORT: ${PGADMIN_PORT}
-      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_SERVER_MODE: ${PGADMIN_SERVER_MODE}
     ports:
       - "${PGADMIN_PORT}:${PGADMIN_PORT}"
     volumes:
@@ -154,15 +165,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    mem_limit: 256m
-    cpus: 0.25
+    mem_limit: ${PGADMIN_MEM_LIMIT}
+    cpus: ${PGADMIN_CPUS}
     profiles:
-      - dev
+      - ${PGADMIN_PROFILE}
 
 volumes:
   pgdata:
-    name: servicehub-pgdata
-  uploads_data:
-    name: servicehub-uploads
+    name: ${PGDATA_VOLUME_NAME}
   pgadmin_data:
-    name: servicehub-pgadmin
+    name: ${PGADMIN_VOLUME_NAME}
